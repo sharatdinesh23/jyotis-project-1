@@ -22,14 +22,20 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
     const apiKey = req.apiKeyOverride || process.env.GROQ_API_KEY;
     if (apiKey && req.audioBase64) {
       try {
-        const audioBuffer = Buffer.from(req.audioBase64, 'base64');
+        const cleanBase64 = req.audioBase64.replace(/^data:.*?;base64,/, '').trim();
+        const audioBuffer = Buffer.from(cleanBase64, 'base64');
+
+        let ext = 'webm';
+        if (req.mimeType?.includes('wav')) ext = 'wav';
+        else if (req.mimeType?.includes('ogg')) ext = 'ogg';
+        else if (req.mimeType?.includes('mp4') || req.mimeType?.includes('m4a')) ext = 'm4a';
+        else if (req.mimeType?.includes('mp3') || req.mimeType?.includes('mpeg')) ext = 'mp3';
+
         const formData = new FormData();
         const blob = new Blob([audioBuffer], { type: req.mimeType || 'audio/webm' });
-        formData.append('file', blob, 'consultation.webm');
+        formData.append('file', blob, `recording.${ext}`);
         formData.append('model', 'whisper-large-v3');
-        if (process.env.TRANSCRIPTION_SYSTEM_PROMPT) {
-          formData.append('prompt', process.env.TRANSCRIPTION_SYSTEM_PROMPT);
-        }
+        formData.append('prompt', 'Doctor patient medical consultation in Hindi, Marathi, and English.');
         if (req.language) {
           formData.append('language', req.language);
         }
@@ -45,34 +51,39 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
 
         if (response.ok) {
           const result = await response.json();
-          const segments: TranscriptSegment[] = (result.segments || []).map((seg: any, idx: number) => ({
-            id: `groq-stt-${idx}`,
-            speaker: idx % 2 === 0 ? 'Doctor' : 'Patient',
-            timestamp: formatSeconds(seg.start || 0),
-            text: seg.text.trim(),
-            language: result.language || 'hi'
-          }));
+          const segments: TranscriptSegment[] = (result.segments || [])
+            .filter((seg: any) => seg.text && seg.text.trim().length > 0)
+            .map((seg: any, idx: number) => ({
+              id: `groq-stt-${idx}`,
+              speaker: idx % 2 === 0 ? 'Patient' : 'Doctor',
+              timestamp: formatSeconds(seg.start || 0),
+              text: seg.text.trim(),
+              language: result.language || 'hi'
+            }));
 
-          if (segments.length === 0 && result.text) {
+          if (segments.length === 0 && result.text && result.text.trim().length > 0) {
             segments.push({
               id: 'groq-stt-1',
-              speaker: 'Doctor',
+              speaker: 'Patient',
               timestamp: '00:00',
               text: result.text.trim(),
               language: result.language || 'hi'
             });
           }
 
-          return {
-            transcript: segments,
-            providerUsed: 'Groq Whisper-Large-V3 [LIVE Free Engine]',
-            detectedLanguage: result.language || 'Mixed'
-          };
+          if (segments.length > 0) {
+            return {
+              transcript: segments,
+              providerUsed: 'Groq Whisper-Large-V3 [LIVE Free Engine]',
+              detectedLanguage: result.language || 'Mixed'
+            };
+          }
         } else {
-          console.warn('Groq Whisper error, falling back to mock adapter:', await response.text());
+          const errText = await response.text();
+          console.warn('Groq Whisper API returned error:', response.status, errText);
         }
       } catch (err) {
-        console.warn('Groq Whisper connection error, falling back to mock:', err);
+        console.warn('Groq Whisper connection error:', err);
       }
     }
   }
@@ -82,7 +93,8 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
     const apiKey = req.apiKeyOverride || process.env.OPENAI_API_KEY;
     if (apiKey && req.audioBase64) {
       try {
-        const audioBuffer = Buffer.from(req.audioBase64, 'base64');
+        const cleanBase64 = req.audioBase64.replace(/^data:audio\/\w+;base64,/, '').replace(/^data:.*?;base64,/, '');
+        const audioBuffer = Buffer.from(cleanBase64, 'base64');
         const formData = new FormData();
         const blob = new Blob([audioBuffer], { type: req.mimeType || 'audio/webm' });
         formData.append('file', blob, 'consultation.webm');
@@ -139,7 +151,8 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
     const apiKey = req.apiKeyOverride || process.env.DEEPGRAM_API_KEY;
     if (apiKey && req.audioBase64) {
       try {
-        const audioBuffer = Buffer.from(req.audioBase64, 'base64');
+        const cleanBase64 = req.audioBase64.replace(/^data:audio\/\w+;base64,/, '').replace(/^data:.*?;base64,/, '');
+        const audioBuffer = Buffer.from(cleanBase64, 'base64');
         const response = await fetch('https://api.deepgram.com/v1/listen?model=nova-2-medical&diarize=true&punctuate=true', {
           method: 'POST',
           headers: {
@@ -172,11 +185,20 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
     }
   }
 
-  // 3. MOCK ADAPTER (Default for demo showcase)
+  // 3. FALLBACK: Only return Knee Pain benchmark if explicitly requested or zero audio provided
+  if (req.isKneePainBenchmark || !req.audioBase64) {
+    return {
+      transcript: sampleKneePainConsultation.transcript,
+      providerUsed: 'Mock Speech Adapter (Knee Pain Benchmark Script)',
+      detectedLanguage: 'Mixed Hindi-English'
+    };
+  }
+
+  // If real user audio was provided but no speech words were found in the stream
   return {
-    transcript: sampleKneePainConsultation.transcript,
-    providerUsed: 'Mock Speech Adapter (Knee Pain Benchmark Script)',
-    detectedLanguage: 'Mixed Hindi-English'
+    transcript: [],
+    providerUsed: 'Whisper STT (No clear speech detected in recorded audio)',
+    detectedLanguage: 'None'
   };
 }
 

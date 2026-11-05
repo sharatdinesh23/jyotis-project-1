@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { extractMedicalData } from '@/lib/adapters/ai-service';
 import { clinicStore } from '@/lib/store';
 
+function toText(val: any): string {
+  if (!val) return '';
+  if (Array.isArray(val)) return val.filter(Boolean).join('; ');
+  return String(val);
+}
+
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const body = await req.json();
@@ -26,24 +32,55 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       consultation.extraction = extraction;
       
       // Update case paper fields from extraction
-      consultation.casePaper.chiefComplaints = extraction.patientSymptomsReported || consultation.casePaper.chiefComplaints;
-      consultation.casePaper.historyOfPresentIllness = extraction.durationAndSeverity || consultation.casePaper.historyOfPresentIllness;
-      consultation.casePaper.pastMedicalHistory = extraction.relevantMedicalHistory || consultation.casePaper.pastMedicalHistory;
-      consultation.casePaper.physicalExamination = extraction.doctorClinicalObservations || consultation.casePaper.physicalExamination;
+      consultation.casePaper.chiefComplaints = toText(extraction.patientSymptomsReported) || consultation.casePaper.chiefComplaints;
+      consultation.casePaper.historyOfPresentIllness = toText(extraction.durationAndSeverity) || consultation.casePaper.historyOfPresentIllness;
+      consultation.casePaper.pastMedicalHistory = toText(extraction.relevantMedicalHistory) || consultation.casePaper.pastMedicalHistory;
+      consultation.casePaper.physicalExamination = toText(extraction.doctorClinicalObservations) || consultation.casePaper.physicalExamination;
       consultation.casePaper.clinicalAssessment = {
-        suspected: extraction.suspectedDiagnoses?.join('; ') || '',
-        confirmed: extraction.confirmedDiagnoses?.join('; ') || ''
+        suspected: toText(extraction.suspectedDiagnoses),
+        confirmed: toText(extraction.confirmedDiagnoses)
       };
-      consultation.casePaper.treatmentPlan = extraction.treatmentRecommendations?.join('\n') || consultation.casePaper.treatmentPlan;
-      consultation.casePaper.lifestyleDietAdvice = extraction.lifestyleDietInstructions?.join('\n') || consultation.casePaper.lifestyleDietAdvice;
-      consultation.casePaper.followUpAdvice = extraction.followUpRecommendation || consultation.casePaper.followUpAdvice;
+      consultation.casePaper.treatmentPlan = toText(extraction.treatmentRecommendations) || consultation.casePaper.treatmentPlan;
+      consultation.casePaper.lifestyleDietAdvice = toText(extraction.lifestyleDietInstructions) || consultation.casePaper.lifestyleDietAdvice;
+      consultation.casePaper.followUpAdvice = toText(extraction.followUpRecommendation) || consultation.casePaper.followUpAdvice;
 
-      // Update prescription draft
-      consultation.prescription.medicines = extraction.medicinesMentioned || [];
-      consultation.prescription.instructions = extraction.treatmentRecommendations || [];
-      consultation.prescription.dietaryAdvice = extraction.lifestyleDietInstructions || [];
+      // Normalize medicines draft
+      consultation.prescription.medicines = (extraction.medicinesMentioned || []).map((m: any, idx: number) => ({
+        id: m.id || `med-${idx + 1}`,
+        name: m.name || 'Unnamed Medicine',
+        form: m.form || 'Tablet',
+        dosage: m.dosage || '',
+        frequency: m.frequency || 'As advised',
+        timing: m.timing || 'After Food',
+        duration: m.duration || '5 days',
+        instructions: m.instructions || '',
+        flagged: Boolean(m.flagged || !m.frequency || !m.dosage),
+        flagReason: m.flagReason || (!m.frequency ? 'Frequency not stated in consultation' : '')
+      }));
+
+      consultation.prescription.instructions = Array.isArray(extraction.treatmentRecommendations) 
+        ? extraction.treatmentRecommendations 
+        : [toText(extraction.treatmentRecommendations)].filter(Boolean);
+
+      consultation.prescription.dietaryAdvice = Array.isArray(extraction.lifestyleDietInstructions)
+        ? extraction.lifestyleDietInstructions
+        : [toText(extraction.lifestyleDietInstructions)].filter(Boolean);
+
       consultation.prescription.followUpDate = extraction.followUpDate || '';
-      consultation.prescription.flags = extraction.flags || [];
+
+      // Normalize flags
+      consultation.prescription.flags = (extraction.flags || []).map((f: any, idx: number) => {
+        if (typeof f === 'string') {
+          return {
+            id: `fl-${idx + 1}`,
+            type: 'missing_frequency' as const,
+            message: f,
+            field: 'medicinesMentioned',
+            resolved: false
+          };
+        }
+        return f;
+      });
 
       clinicStore.saveConsultation(consultation);
     }

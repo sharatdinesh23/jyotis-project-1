@@ -3,8 +3,8 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   const aiProvider = process.env.AI_PROVIDER || 'gemini';
   const aiModel = process.env.AI_MODEL || (
-    aiProvider === 'groq' ? 'llama-3.3-70b-versatile' :
-    aiProvider === 'gemini' ? 'gemini-1.5-flash' :
+    aiProvider === 'groq' ? 'openai/gpt-oss-120b' :
+    aiProvider === 'gemini' ? 'gemini-3.5-flash' :
     aiProvider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : 'gpt-4o'
   );
   const transcriptionProvider = process.env.TRANSCRIPTION_PROVIDER || 'mock';

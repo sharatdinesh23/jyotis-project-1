@@ -81,12 +81,8 @@ function cleanAndParseJSON(rawContent: string): any {
 }
 
 export async function extractMedicalData(req: ExtractionRequest): Promise<MedicalExtraction> {
-  const provider = req.providerOverride || process.env.AI_PROVIDER || 'mock';
-  const model = req.modelOverride || process.env.AI_MODEL || (
-    provider === 'groq' ? 'llama-3.3-70b-versatile' :
-    provider === 'gemini' ? 'gemini-1.5-flash' :
-    provider === 'openrouter' ? 'meta-llama/llama-3.3-70b-instruct:free' : 'gpt-4o'
-  );
+  const provider = req.providerOverride || process.env.AI_PROVIDER || 'gemini';
+  const rawModel = req.modelOverride || process.env.AI_MODEL;
   const systemPrompt = getSystemPrompt();
   const temperature = getTemperature();
   
@@ -94,41 +90,50 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
     .map(t => `[${t.speaker} - ${t.timestamp}]: ${t.text}`)
     .join('\n');
 
-  // 1. GROQ ADAPTER (100% Free, ultra-fast LLaMA-3.3-70B)
+  // 1. GROQ ADAPTER (100% Free, ultra-fast inference)
   if (provider === 'groq') {
     const apiKey = req.apiKeyOverride || process.env.GROQ_API_KEY;
     if (apiKey && apiKey.trim().length > 5) {
-      try {
-        const groqModel = model || 'llama-3.3-70b-versatile';
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey.trim()}`,
-          },
-          body: JSON.stringify({
-            model: groqModel,
-            response_format: { type: 'json_object' },
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: `Extract structured clinical data strictly adhering to the schema from this transcript:\n\n${transcriptText}` },
-            ],
-            temperature: temperature,
-          }),
-        });
+      const groqCandidates = Array.from(new Set([
+        rawModel || 'openai/gpt-oss-120b',
+        'openai/gpt-oss-120b',
+        'openai/gpt-oss-20b',
+        'llama-3.3-70b-versatile',
+        'llama-3.1-8b-instant'
+      ]));
 
-        if (response.ok) {
-          const data = await response.json();
-          const parsed = cleanAndParseJSON(data.choices[0].message.content);
-          return {
-            ...parsed,
-            providerUsed: `Groq (${groqModel}) [LIVE Free Engine]`
-          };
-        } else {
-          console.warn('Groq extraction error, falling back to mock adapter:', await response.text());
+      for (const groqModel of groqCandidates) {
+        try {
+          const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey.trim()}`,
+            },
+            body: JSON.stringify({
+              model: groqModel,
+              response_format: { type: 'json_object' },
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: `Extract structured clinical data strictly adhering to the schema from this transcript:\n\n${transcriptText}` },
+              ],
+              temperature: temperature,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const parsed = cleanAndParseJSON(data.choices[0].message.content);
+            return {
+              ...parsed,
+              providerUsed: `Groq (${groqModel}) [LIVE Free Engine]`
+            };
+          } else {
+            console.warn(`Groq model ${groqModel} returned status ${response.status}`);
+          }
+        } catch (err) {
+          console.warn(`Groq connection error for ${groqModel}:`, err);
         }
-      } catch (err) {
-        console.warn('Groq connection error, falling back to mock:', err);
       }
     }
   }
@@ -137,43 +142,58 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
   if (provider === 'gemini') {
     const apiKey = req.apiKeyOverride || process.env.GEMINI_API_KEY;
     if (apiKey && apiKey.trim().length > 5) {
-      try {
-        const geminiModel = model.includes('gemini') ? model : 'gemini-1.5-flash';
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey.trim()}`;
-        const response = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: systemPrompt }]
-            },
-            contents: [{
-              parts: [
-                { text: `Extract structured clinical data in pure JSON matching the schema from this consultation transcript:\n\n${transcriptText}` }
-              ]
-            }],
-            generationConfig: {
-              responseMimeType: 'application/json',
-              temperature: temperature
-            }
-          })
-        });
+      let initialModel = rawModel || 'gemini-3.5-flash';
+      // Auto-upgrade deprecated gemini-1.5-flash to active gemini-3.5-flash
+      if (initialModel === 'gemini-1.5-flash' || initialModel === 'gemini' || initialModel === 'gemini-2.0-flash') {
+        initialModel = 'gemini-3.5-flash';
+      }
 
-        if (response.ok) {
-          const data = await response.json();
-          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-          if (text) {
-            const parsed = cleanAndParseJSON(text);
-            return {
-              ...parsed,
-              providerUsed: `Google Gemini (${geminiModel}) [LIVE Free Studio]`
-            };
+      const candidateModels = Array.from(new Set([
+        initialModel,
+        'gemini-3.5-flash',
+        'gemini-3.5-flash-lite',
+        'gemini-flash-latest'
+      ]));
+
+      for (const geminiModel of candidateModels) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey.trim()}`;
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: {
+                parts: [{ text: systemPrompt }]
+              },
+              contents: [{
+                parts: [
+                  { text: `Extract structured clinical data in pure JSON matching the schema from this consultation transcript:\n\n${transcriptText}` }
+                ]
+              }],
+              generationConfig: {
+                responseMimeType: 'application/json',
+                temperature: temperature
+              }
+            })
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (text) {
+              const parsed = cleanAndParseJSON(text);
+              return {
+                ...parsed,
+                providerUsed: `Google Gemini (${geminiModel}) [LIVE Free Studio]`
+              };
+            }
+          } else {
+            const errData = await response.text();
+            console.warn(`Gemini model ${geminiModel} failed (${response.status}):`, errData);
           }
-        } else {
-          console.warn('Gemini request failed, falling back to mock:', await response.text());
+        } catch (err) {
+          console.warn(`Gemini error on model ${geminiModel}:`, err);
         }
-      } catch (err) {
-        console.warn('Gemini error, falling back to mock:', err);
       }
     }
   }
@@ -183,7 +203,7 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
     const apiKey = req.apiKeyOverride || process.env.OPENROUTER_API_KEY;
     if (apiKey && apiKey.trim().length > 5) {
       try {
-        const openrouterModel = model || 'meta-llama/llama-3.3-70b-instruct:free';
+        const openrouterModel = rawModel || 'meta-llama/llama-3.3-70b-instruct:free';
         const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -225,6 +245,7 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
     const apiKey = req.apiKeyOverride || process.env.OPENAI_API_KEY;
     if (apiKey && apiKey.trim().length > 5) {
       try {
+        const openaiModel = rawModel || 'gpt-4o';
         const response = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
           headers: {
@@ -232,7 +253,7 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
             'Authorization': `Bearer ${apiKey.trim()}`,
           },
           body: JSON.stringify({
-            model: model || 'gpt-4o',
+            model: openaiModel,
             response_format: { type: 'json_object' },
             messages: [
               { role: 'system', content: systemPrompt },
@@ -247,7 +268,7 @@ export async function extractMedicalData(req: ExtractionRequest): Promise<Medica
           const parsed = cleanAndParseJSON(data.choices[0].message.content);
           return {
             ...parsed,
-            providerUsed: `OpenAI (${model || 'gpt-4o'}) [LIVE]`
+            providerUsed: `OpenAI (${openaiModel}) [LIVE]`
           };
         } else {
           console.warn('OpenAI request failed, falling back to mock adapter:', await response.text());

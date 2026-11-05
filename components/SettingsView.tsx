@@ -319,36 +319,36 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => setAiModel('gemini-1.5-flash')}
+                  onClick={() => setAiModel('gemini-3.5-flash')}
                   className={`px-3 py-1.5 rounded-lg border font-mono ${
-                    aiModel === 'gemini-1.5-flash'
+                    aiModel === 'gemini-3.5-flash'
                       ? 'bg-revonix-purple-600 text-white border-revonix-purple-400 font-bold'
                       : 'bg-revonix-900 text-slate-300 border-revonix-700'
                   }`}
                 >
-                  gemini-1.5-flash (Free - Recommended)
+                  gemini-3.5-flash (Free - Recommended)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAiModel('gemini-2.0-flash')}
+                  onClick={() => setAiModel('gemini-3.5-flash-lite')}
                   className={`px-3 py-1.5 rounded-lg border font-mono ${
-                    aiModel === 'gemini-2.0-flash'
+                    aiModel === 'gemini-3.5-flash-lite'
                       ? 'bg-revonix-purple-600 text-white border-revonix-purple-400 font-bold'
                       : 'bg-revonix-900 text-slate-300 border-revonix-700'
                   }`}
                 >
-                  gemini-2.0-flash
+                  gemini-3.5-flash-lite (Ultra-Fast)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAiModel('gemini-1.5-pro')}
+                  onClick={() => setAiModel('gemini-flash-latest')}
                   className={`px-3 py-1.5 rounded-lg border font-mono ${
-                    aiModel === 'gemini-1.5-pro'
+                    aiModel === 'gemini-flash-latest'
                       ? 'bg-revonix-purple-600 text-white border-revonix-purple-400 font-bold'
                       : 'bg-revonix-900 text-slate-300 border-revonix-700'
                   }`}
                 >
-                  gemini-1.5-pro
+                  gemini-flash-latest
                 </button>
               </>
             )}
@@ -357,25 +357,25 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               <>
                 <button
                   type="button"
-                  onClick={() => setAiModel('llama-3.3-70b-versatile')}
+                  onClick={() => setAiModel('openai/gpt-oss-120b')}
                   className={`px-3 py-1.5 rounded-lg border font-mono ${
-                    aiModel === 'llama-3.3-70b-versatile'
+                    aiModel === 'openai/gpt-oss-120b'
                       ? 'bg-orange-600 text-white border-orange-400 font-bold'
                       : 'bg-revonix-900 text-slate-300 border-revonix-700'
                   }`}
                 >
-                  llama-3.3-70b-versatile (Free - Ultra-Fast)
+                  openai/gpt-oss-120b (Free High-Accuracy)
                 </button>
                 <button
                   type="button"
-                  onClick={() => setAiModel('llama-3.1-8b-instant')}
+                  onClick={() => setAiModel('openai/gpt-oss-20b')}
                   className={`px-3 py-1.5 rounded-lg border font-mono ${
-                    aiModel === 'llama-3.1-8b-instant'
+                    aiModel === 'openai/gpt-oss-20b'
                       ? 'bg-orange-600 text-white border-orange-400 font-bold'
                       : 'bg-revonix-900 text-slate-300 border-revonix-700'
                   }`}
                 >
-                  llama-3.1-8b-instant (Fastest)
+                  openai/gpt-oss-20b (Ultra-Fast)
                 </button>
               </>
             )}
