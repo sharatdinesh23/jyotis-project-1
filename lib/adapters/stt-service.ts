@@ -8,6 +8,7 @@ export interface TranscribeRequest {
   providerOverride?: 'groq' | 'openai' | 'deepgram' | 'mock';
   apiKeyOverride?: string;
   isKneePainBenchmark?: boolean;
+  defaultSpeaker?: 'Doctor' | 'Patient';
 }
 
 export async function transcribeAudio(req: TranscribeRequest): Promise<{
@@ -16,6 +17,7 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
   detectedLanguage: string;
 }> {
   const provider = req.providerOverride || process.env.TRANSCRIPTION_PROVIDER || 'mock';
+  const speakerLabel = req.defaultSpeaker || 'Doctor';
 
   // 1. GROQ WHISPER LIVE ADAPTER (100% Free ultra-fast Whisper Large v3)
   if (provider === 'groq') {
@@ -55,7 +57,7 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
             .filter((seg: any) => seg.text && seg.text.trim().length > 0)
             .map((seg: any, idx: number) => ({
               id: `groq-stt-${idx}`,
-              speaker: idx % 2 === 0 ? 'Patient' : 'Doctor',
+              speaker: speakerLabel,
               timestamp: formatSeconds(seg.start || 0),
               text: seg.text.trim(),
               language: result.language || 'hi'
@@ -64,7 +66,7 @@ export async function transcribeAudio(req: TranscribeRequest): Promise<{
           if (segments.length === 0 && result.text && result.text.trim().length > 0) {
             segments.push({
               id: 'groq-stt-1',
-              speaker: 'Patient',
+              speaker: speakerLabel,
               timestamp: '00:00',
               text: result.text.trim(),
               language: result.language || 'hi'

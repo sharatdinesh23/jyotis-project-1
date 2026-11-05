@@ -11,7 +11,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       language: body.language,
       providerOverride: body.providerOverride,
       apiKeyOverride: body.apiKeyOverride,
-      isKneePainBenchmark: body.isKneePainBenchmark
+      isKneePainBenchmark: body.isKneePainBenchmark,
+      defaultSpeaker: body.defaultSpeaker || 'Doctor'
     });
 
     const consultation = clinicStore.getConsultationById(params.id);

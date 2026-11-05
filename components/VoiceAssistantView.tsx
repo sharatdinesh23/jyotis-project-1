@@ -193,7 +193,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               setTranscript([
                 {
                   id: 'live-rec-1',
-                  speaker: 'Patient',
+                  speaker: 'Doctor',
                   timestamp: formatTimer(recordingSeconds || 2),
                   text: spoken.trim(),
                   language: 'hi'
@@ -256,6 +256,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
                 audioBase64: base64,
                 mimeType: audioBlob.type || 'audio/webm',
                 providerOverride: transcriptionProvider || 'groq',
+                defaultSpeaker: 'Doctor'
               }),
             });
 
@@ -270,7 +271,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               setTranscript([
                 {
                   id: 'live-stt-1',
-                  speaker: 'Patient',
+                  speaker: 'Doctor',
                   timestamp: formatTimer(recordingSeconds || 2),
                   text: liveCapturedTextRef.current.trim(),
                   language: 'hi'
@@ -289,7 +290,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               setTranscript([
                 {
                   id: 'live-stt-1',
-                  speaker: 'Patient',
+                  speaker: 'Doctor',
                   timestamp: formatTimer(recordingSeconds || 2),
                   text: liveCapturedTextRef.current.trim(),
                   language: 'hi'
@@ -313,7 +314,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
         setTranscript([
           {
             id: 'live-stt-1',
-            speaker: 'Patient',
+            speaker: 'Doctor',
             timestamp: formatTimer(recordingSeconds || 2),
             text: liveCapturedTextRef.current.trim(),
             language: 'hi'
@@ -364,6 +365,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               audioBase64: base64,
               mimeType: file.type || 'audio/webm',
               providerOverride: transcriptionProvider || 'groq',
+              defaultSpeaker: 'Doctor'
             }),
           });
           const data = await res.json();
@@ -373,12 +375,12 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
             setDetectedLang(data.detectedLanguage || 'Mixed Hindi/English');
             setStatusMessage(`✓ File transcribed via ${data.providerUsed}!`);
           } else {
-            setTranscript(sampleKneePainConsultation.transcript);
-            setTranscriptionEngineUsed('Mock Speech Adapter');
+            setTranscript([]);
+            setStatusMessage('No spoken words recognized in uploaded audio file.');
           }
         } catch (err) {
-          setTranscript(sampleKneePainConsultation.transcript);
-          setTranscriptionEngineUsed('Mock Speech Adapter');
+          setTranscript([]);
+          setStatusMessage('Could not transcribe audio file. Please check audio format.');
         } finally {
           setIsTranscribing(false);
         }
@@ -388,14 +390,11 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
 
   // Add custom line manually to test custom clinical terms
   const handleAddCustomLine = () => {
-    const isDoctor = transcript.length % 2 === 1;
     const newSeg: TranscriptSegment = {
       id: `custom-seg-${Date.now()}`,
-      speaker: isDoctor ? 'Doctor' : 'Patient',
+      speaker: 'Doctor',
       timestamp: formatTimer(recordingSeconds || 15),
-      text: isDoctor
-        ? 'Main aapko Tab. Paracetamol 650mg 1-0-1 khane ke baad likh raha hu.'
-        : 'Doctor saheb, mujhe ghutne me bohot dard hai aur chalne me dikkat hoti hai.',
+      text: 'Tab. Paracetamol 650mg 1-0-1 after food for 5 days. Blood test advised.',
       language: 'hi'
     };
     setTranscript([...transcript, newSeg]);
@@ -818,15 +817,23 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
                   >
                     <div className="flex items-center justify-between text-[11px] mb-1">
                       <div className="flex items-center gap-2">
-                        <span
-                          className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = [...transcript];
+                            updated[idx].speaker = isDoctor ? 'Patient' : 'Doctor';
+                            setTranscript(updated);
+                          }}
+                          className={`font-bold px-2 py-0.5 rounded text-[10px] cursor-pointer hover:scale-105 transition-all flex items-center gap-1 ${
                             isDoctor
-                              ? 'bg-revonix-purple-900 text-revonix-purple-200'
-                              : 'bg-slate-800 text-cyan-300'
+                              ? 'bg-revonix-purple-900 text-revonix-purple-200 border border-revonix-purple-700/60 hover:bg-revonix-800'
+                              : 'bg-cyan-950 text-cyan-300 border border-cyan-700/60 hover:bg-cyan-900'
                           }`}
+                          title="Click to toggle speaker between Doctor and Patient"
                         >
-                          {seg.speaker}
-                        </span>
+                          <span>{seg.speaker}</span>
+                          <span className="text-[9px] opacity-70">⇄</span>
+                        </button>
                         <span className="font-mono text-slate-400 text-[10px]">
                           [{seg.timestamp}]
                         </span>
