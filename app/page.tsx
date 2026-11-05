@@ -345,6 +345,7 @@ export default function Home() {
               currentLanguage={currentLanguage}
               aiProvider={settings.aiProvider}
               aiModel={settings.aiModel}
+              transcriptionProvider={settings.transcriptionProvider || 'groq'}
             />
           )}
 

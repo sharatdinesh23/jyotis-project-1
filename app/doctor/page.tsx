@@ -37,6 +37,11 @@ export default function DoctorWorkspacePage() {
   const [patientVoiceNotes, setPatientVoiceNotes] = useState<any[]>([]);
   const [activeConsultationId, setActiveConsultationId] = useState<string | null>('CON-2026-0101');
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [settings, setSettings] = useState<any>({
+    aiProvider: 'gemini',
+    aiModel: 'gemini-3.5-flash',
+    transcriptionProvider: 'groq'
+  });
 
   const currentDoctor: Doctor = {
     id: sessionUser?.id || 'DOC-01',
@@ -93,6 +98,17 @@ export default function DoctorWorkspacePage() {
       .then(data => {
         if (data.voiceNotes) setPatientVoiceNotes(data.voiceNotes);
       });
+
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        setSettings({
+          aiProvider: data.aiProvider || 'gemini',
+          aiModel: data.aiModel || 'gemini-3.5-flash',
+          transcriptionProvider: data.transcriptionProvider || 'groq'
+        });
+      })
+      .catch(() => {});
   }, [router]);
 
   if (isCheckingAuth || !sessionUser) {
@@ -279,8 +295,9 @@ export default function DoctorWorkspacePage() {
               }}
               currentRole="doctor"
               currentLanguage="en"
-              aiProvider="mock"
-              aiModel="gpt-4o"
+              aiProvider={settings.aiProvider || 'gemini'}
+              aiModel={settings.aiModel || 'gemini-3.5-flash'}
+              transcriptionProvider={settings.transcriptionProvider || 'groq'}
             />
           )}
 

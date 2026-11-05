@@ -155,6 +155,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
     setExtractionResult(null);
     setAudioUrl(null);
     audioChunksRef.current = [];
+    liveCapturedTextRef.current = '';
     setRecordingSeconds(0);
 
     try {
@@ -174,7 +175,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
       setIsPaused(false);
       setStatusMessage('Microphone active. Capturing live in-room audio...');
 
-      // Optional real-time speech preview via Web Speech API
+      // Real-time speech recognition for live instant words
       const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
       if (SpeechRec) {
         try {
@@ -188,12 +189,13 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               .map((r: any) => r[0].transcript)
               .join(' ');
             if (spoken.trim().length > 0) {
+              liveCapturedTextRef.current = spoken.trim();
               setTranscript([
                 {
                   id: 'live-rec-1',
                   speaker: 'Patient',
-                  timestamp: '00:05',
-                  text: spoken,
+                  timestamp: formatTimer(recordingSeconds || 2),
+                  text: spoken.trim(),
                   language: 'hi'
                 }
               ]);
@@ -204,15 +206,14 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
           rec.start();
           speechRecognitionRef.current = rec;
         } catch (e) {
-          // Graceful fallback to Whisper after stop
+          // Fallback to Whisper after stop
         }
       }
     } catch (err: any) {
-      console.warn('Microphone error:', err);
-      // Fallback to simulated benchmark if browser denies mic
+      console.warn('Microphone permission error:', err);
       setIsRecording(true);
       setIsPaused(false);
-      setStatusMessage('Live audio recording started (Mic mode active).');
+      setStatusMessage('Microphone capturing simulated input.');
     }
   };
 
@@ -241,7 +242,7 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
         }
 
         setIsTranscribing(true);
-        setStatusMessage('Transcribing captured voice using Groq Whisper Large-V3...');
+        setStatusMessage('Transcribing captured voice with Groq Whisper Large-V3...');
 
         const reader = new FileReader();
         reader.readAsDataURL(audioBlob);
@@ -264,16 +265,41 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
               setTranscriptionEngineUsed(data.providerUsed || 'Groq Whisper-Large-V3 [LIVE Free Engine]');
               setDetectedLang(data.detectedLanguage || 'Mixed Hindi/English');
               setStatusMessage(`✓ Speech recognized via ${data.providerUsed}!`);
+            } else if (liveCapturedTextRef.current && liveCapturedTextRef.current.trim().length > 0) {
+              // Real voice words captured by live microphone!
+              setTranscript([
+                {
+                  id: 'live-stt-1',
+                  speaker: 'Patient',
+                  timestamp: formatTimer(recordingSeconds || 2),
+                  text: liveCapturedTextRef.current.trim(),
+                  language: 'hi'
+                }
+              ]);
+              setTranscriptionEngineUsed('Browser Microphone Recognition [LIVE]');
+              setStatusMessage('✓ Voice captured directly from your microphone!');
             } else {
-              setTranscript(sampleKneePainConsultation.transcript);
-              setTranscriptionEngineUsed('Mock Speech Adapter (Knee Pain Benchmark)');
-              setStatusMessage('Transcribed via Speech Adapter fallback.');
+              setTranscript([]);
+              setTranscriptionEngineUsed('Microphone (No audible words detected)');
+              setStatusMessage('No speech was detected. Please speak closer to your microphone or click "+ Custom Line".');
             }
           } catch (err) {
             console.warn('Transcription error:', err);
-            setTranscript(sampleKneePainConsultation.transcript);
-            setTranscriptionEngineUsed('Mock Speech Adapter (Fallback)');
-            setStatusMessage('Transcription complete via Mock STT.');
+            if (liveCapturedTextRef.current && liveCapturedTextRef.current.trim().length > 0) {
+              setTranscript([
+                {
+                  id: 'live-stt-1',
+                  speaker: 'Patient',
+                  timestamp: formatTimer(recordingSeconds || 2),
+                  text: liveCapturedTextRef.current.trim(),
+                  language: 'hi'
+                }
+              ]);
+              setTranscriptionEngineUsed('Browser Microphone Recognition [LIVE]');
+            } else {
+              setTranscript([]);
+              setStatusMessage('Microphone recorded silence. Speak into your mic or click "+ Custom Line".');
+            }
           } finally {
             setIsTranscribing(false);
           }
@@ -282,15 +308,22 @@ export const VoiceAssistantView: React.FC<VoiceAssistantViewProps> = ({
 
       mediaRecorderRef.current.stop();
     } else {
-      // Direct simulation if no physical mic stream
-      setIsTranscribing(true);
-      setStatusMessage('Transcribing audio via STT service...');
-      setTimeout(() => {
-        setTranscript(sampleKneePainConsultation.transcript);
-        setTranscriptionEngineUsed('Mock Speech Adapter (Knee Pain Benchmark)');
-        setIsTranscribing(false);
-        setStatusMessage('Transcription complete. Ready for doctor review or AI extraction.');
-      }, 800);
+      // Fallback if no physical media recorder
+      if (liveCapturedTextRef.current && liveCapturedTextRef.current.trim().length > 0) {
+        setTranscript([
+          {
+            id: 'live-stt-1',
+            speaker: 'Patient',
+            timestamp: formatTimer(recordingSeconds || 2),
+            text: liveCapturedTextRef.current.trim(),
+            language: 'hi'
+          }
+        ]);
+        setTranscriptionEngineUsed('Browser Microphone Recognition [LIVE]');
+        setStatusMessage('✓ Voice captured from microphone!');
+      } else {
+        setStatusMessage('No microphone stream was detected. Please check browser microphone permissions.');
+      }
     }
   };
 
